@@ -509,19 +509,48 @@ function buildPDF(m,selectedMeasure,art,logo,saved,onlyStall=null){
   }while(i<records.length);
   y+=13;
  }
- function chartBlock(){
-  const cash=selectedMeasure==='revenue',a=cash?'lr':'lu',b=cash?'nr':'nu',list=m.timeline;
-  heading(cash?'Daily revenue':'Daily quantity sold');
-  rect(left,y+1,7,7,teal);label(left+11,y+8,'Live Food',9);
-  rect(left+80,y+1,7,7,orange);label(left+91,y+8,'Natural Food',9);label(left+195,y+8,cash?'Revenue in rupees':'Units sold',9,'R',sub);y+=18;
-  if(!list.some(r=>Number.isFinite(r[a])||Number.isFinite(r[b]))){note('No figures reported for this selection.');return}
-  const max=axisTop(list.flatMap(row=>[row[a],row[b]])),x0=left+41,step=(right-x0)/list.length,bw=Math.min(19,step*.27),top=y+3,base=top+83;
-  [0,.5,1].forEach(v=>{let yy=base-v*(base-top);line(x0,yy,right,yy,edge,.5);label(left,yy+3,axisLabel(max*v,cash),8,'R',sub)});
-  list.forEach((row,i)=>{const mid=x0+(i+.5)*step;[row[a],row[b]].forEach((v,j)=>{const bx=mid+(j===0?-bw-1:1);if(v===null){label(bx+bw/2-2,base-2,'–',7,'R',sub);return}const h=Math.max(1.2,(base-top)*v/max);rect(bx,base-h,bw,h,j?orange:teal)});if(list.length<=10||i%2===0||i===list.length-1)label(mid-12,base+12,dayLabel(row.key,true),7.3,'R',sub)});
-  y=base+31;
+ // Helvetica Bold figure widths, including the embedded rupee glyph, in em units.
+ function figureWidth(value,size){
+  let em=0;
+  for(const c of value)em+=c==='₹'?.572:c===','||c==='.'?.278:c==='-'?.333:.556;
+  return em*size;
  }
-
-
+ function barValue(cx,barTop,value){
+  const size=8;
+  label(cx-figureWidth(value,size)/2,barTop-4,value,size,'B',ink);
+ }
+ function chartBlock(){
+  const cash=selectedMeasure==='revenue',keys=cash?['lr','nr']:['lu','nu'];
+  const format=cash?money:units,title=cash?'Daily revenue':'Daily quantity sold',list=m.timeline;
+  const values=list.flatMap(row=>keys.map(k=>row[k])).filter(Number.isFinite);
+  if(!values.length){room(56);heading(title);note('No figures reported for this selection.');return}
+  const max=axisTop(values),x0=left+42;
+  const labelWidth=Math.max(...values.map(v=>figureWidth(format(v),8)));
+  const capacity=Math.max(1,Math.floor((right-x0)/(2*(labelWidth+8)+8)));
+  const count=Math.ceil(list.length/Math.ceil(list.length/capacity));
+  for(let start=0;start<list.length;start+=count){
+   const part=list.slice(start,start+count);
+   room(178);heading(title+(start?' (continued)':''));
+   rect(left,y+1,7,7,teal);label(left+11,y+8,'Live Food',9);
+   rect(left+80,y+1,7,7,orange);label(left+91,y+8,'Natural Food',9);
+   label(left+195,y+8,cash?'Revenue in rupees':'Units sold',9,'R',sub);y+=18;
+   const step=(right-x0)/part.length,offset=Math.min(step/4,(labelWidth+12)/2);
+   const bw=Math.min(22,offset*1.5),top=y+12,base=top+81;
+   for(const t of [0,.5,1]){const yy=base-t*(base-top);line(x0,yy,right,yy,edge,.5);label(left,yy+3,axisLabel(max*t,cash),8,'R',sub)}
+   part.forEach((row,i)=>{
+    const mid=x0+(i+.5)*step;
+    keys.forEach((k,j)=>{
+     const v=row[k],cx=mid+(j?offset:-offset);
+     if(!Number.isFinite(v)){label(cx-3,base-4,'—',8,'R',sub);return}
+     const height=Math.max(1,(base-top)*v/max);
+     rect(cx-bw/2,base-height,bw,height,j?orange:teal);
+     barValue(cx,base-height,format(v));
+    });
+    label(mid-12,base+13,dayLabel(row.key,true),8,'R',sub);
+   });
+   y=base+27;
+  }
+ }
  function room(height){if(y+height>767)page()}
  function dailyBars(p,key,title,color){
   const cash=key==='rev',fmtValue=cash?money:units;
@@ -536,7 +565,7 @@ function buildPDF(m,selectedMeasure,art,logo,saved,onlyStall=null){
     const v=d[key],cx=x0+(i+.5)*step;
     if(Number.isFinite(v)){
      const hh=(base-top)*v/max;rect(cx-bw/2,base-Math.max(1,hh),bw,Math.max(1,hh),color);
-     const value=fmtValue(v);label(cx-value.length*2,base-hh-4,value,8,'B',ink);
+     barValue(cx,base-Math.max(1,hh),fmtValue(v));
     }else label(cx-3,base-4,'—',8,'R',sub);
     label(cx-12,base+13,dayLabel(d.day,true),8,'R',sub);
    });y=base+26;
